@@ -1,14 +1,38 @@
 <html>
-<head>
+<head>    
     <meta name='layout' content='main'/>
     <r:require modules="application"/>
     <title>Home</title>
     <g:javascript>
+        var shoutsViewModel = {
+            Shouts: ko.observableArray(),
+            HighestShout: ko.observable(0),
+            SortShouts: function() {
+                shoutsViewModel.Shouts.sort(
+                    function(left, right) {
+                        return left.id == right.id
+                            ? 0
+                            : (left.id < right.id ? -1 : 1)
+                    }
+                );
+
+                var highest = ko.utils.arrayFirst(shoutsViewModel.Shouts(), function(item){
+                    return true; // Dummy predicate function :)
+                });
+                
+                if (highest != undefined)
+                    shoutsViewModel.HighestShout(highest);
+            }
+        };
+
+        ko.applyBindings(shoutsViewModel, document.getElementById('shouts'));
+
         var cntShouts = 0;
         var cntMatches = 0;
         $(document).ready(function () {
+            ajaxFetchShouts();
             setTimeout(function () {
-                ajaxFetchShouts()
+                ajaxFetchShoutsAfter()
             }, 5000);
             setTimeout(function () {
             	ajaxFetchLatestMatches()
@@ -17,25 +41,41 @@
 
         function ajaxFetchShouts() {
             $.ajax({
-                url: '${createLink(controller: 'shout', action: 'ajaxFetchLatest')}',
-                dataType: 'html',
+                url: '${createLink(controller: 'shout', action: 'ajaxFetchLatest')}',                
+                dataType: 'json',
                 success:function (data) {
-                    $('#shouts').html(data);
+                    shoutsViewModel.Shouts(data);
+                    shoutsViewModel.SortShouts();
+                }
+            });
+        }
+
+        function ajaxFetchShoutsAfter() {
+            $.ajax({
+                url: '${createLink(controller: 'shout', action: 'ajaxFetchLatestAfter')}',
+                data: { id: shoutsViewModel.Highest() },
+                dataType: 'json',
+                success:function (data) {
+                    //TODO: get scrollbar-position
+                    ko.utils.arrayPushAll(shoutsViewModel.Shouts(),data);                    
+                    shoutsViewModel.Shouts.valueHasMutated();                    
+                    shoutsViewModel.SortShouts();                    
+                    //TODO: reset scrollbar-position
                     if (cntShouts < 60) { // poll for 60*5 seconds = 5 minutes
                         cntShouts++;
                         setTimeout(function () {
-                            ajaxFetchShouts()
+                            ajaxFetchShoutsAfter()
                         }, 5000);
                     } else if (cntShouts < 83) { // poll for 23*300 seconds = 115 minutes
                         cntShouts++;
                         setTimeout(function () {
-                            ajaxFetchShouts()
+                            ajaxFetchShoutsAfter()
                         }, 300000);
                     }
                 }
             });
         }
-        
+
         function ajaxFetchLatestMatches() {
             $.ajax({
                 url: '${createLink(controller: 'match', action: 'ajaxFetchLatestMatches')}',
@@ -77,7 +117,9 @@
                 <g:hiddenField name="shout" id="shout" />
             </g:formRemote>
             <div id="shouts">
-                <g:render template="/shout/latestShouts" model="shouts" />
+                <div class="scrollableShouts" data-bind="foreach: Shouts">
+                    <p><b>(<span data-bind="text: shouted"></span>) <span data-bind="text: shouter"></span></b> <span data-bind="text: shout"></span></p>
+                </div>
             </div>
         </div>
     </div>
